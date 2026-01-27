@@ -25,7 +25,7 @@ export default function AboutSection({ dict }: { dict: Dictionary }) {
             {dict.Landing.about.title}
           </h2>
 
-          <p className="text-lg text-gray-300 mb-10 leading-relaxed font-light text-justify max-w-xl">
+          <p className="text-xl text-gray-300 mb-10 leading-relaxed font-light text-justify max-w-xl">
             {dict.Landing.about.description}
           </p>
 
