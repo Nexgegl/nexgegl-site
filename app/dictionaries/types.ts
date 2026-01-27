@@ -203,8 +203,7 @@ export type VisionMissionDictionary = {
 /* ================= HERO ================= */
 
 export interface HeroTitle {
-  line1: string;
-  highlight: string;
+ 
   line2: string;
 }
 
