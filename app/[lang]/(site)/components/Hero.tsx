@@ -83,15 +83,11 @@ export default function Hero({
 
             {/* Titles */}
             <h1 className="text-4xl md:text-6xl font-extrabold text-white leading-tight tracking-tight mb-6 drop-shadow-2xl">
-              <span className="block opacity-0 animate-fade-in-up delay-100">
-                {dict.Landing.hero.title.line1}
-              </span>
+             
               <span className="block text-gradient-gold delay-200">
-                {dict.Landing.hero.title.highlight}
-              </span>
-              <span className="block opacity-0 animate-fade-in-up delay-300 mt-2 text-2xl md:text-3xl text-gray-200 font-light">
                 {dict.Landing.hero.title.line2}
               </span>
+             
             </h1>
 
             {/* Description */}

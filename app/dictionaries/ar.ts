@@ -18,9 +18,7 @@ export const ar = {
       branding: "ذكاء القرار السعودي",
 
       title: {
-        line1: "افتح",
-        highlight: "رؤية ذكية 360°",
-        line2: "لمؤسستك ،مصممة لدعمك.",
+        line2: "مصممة لدعمك.",
       },
 
       description: {
@@ -294,7 +292,7 @@ export const ar = {
         email: "info@nexgegl.com",
         website: "https://www.nexgegl.com",
         websiteLabel: "www.nexgegl.com",
-        phone: "+966 53 979 6996",
+        phone: "9666537976996+",
       },
 
       platform: {

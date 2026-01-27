@@ -162,27 +162,36 @@ export const TechImageFrame: React.FC<TechImageFrameProps> = ({
   statLabel,
   color = "gold",
 }) => {
+  const [active, setActive] = useState(false);
+
   const borderColor = color === "gold" ? "border-gold-500" : "border-white";
   const textColor = color === "gold" ? "text-gold-400" : "text-white";
   const bgColor = color === "gold" ? "bg-gold-500" : "bg-white";
 
   return (
     <div
-      className={`relative group overflow-hidden rounded-sm border border-navy-700 bg-navy-950 ${className}`}
+      className={`
+        relative overflow-hidden rounded-sm border border-navy-700 bg-navy-950
+        ${active ? "is-active" : ""}
+        ${className}
+      `}
+      onTouchStart={() => setActive(true)}
+      onTouchEnd={() => setActive(false)}
+      onMouseEnter={() => setActive(true)}
+      onMouseLeave={() => setActive(false)}
     >
       {/* Base Image */}
-      <img
-        src={typeof src === "string" ? src : src.src}
-        alt={alt}
-        className="
-          w-full h-full object-cover
-          opacity-70 scale-[1.04] grayscale
-          transition-all duration-[1200ms] ease-out
-          group-hover:opacity-100
-          group-hover:scale-100
-          group-hover:grayscale-0
-        "
-      />
+     <img
+      src={typeof src === "string" ? src : src.src}
+      alt={alt}
+      className={`
+        w-full h-full object-cover
+        opacity-70 scale-[1.04] grayscale
+        transition-all duration-[1200ms] ease-out
+        ${active && "opacity-100 scale-100 grayscale-0"}
+      `}
+    />
+
 
       {/* Dark Overlay */}
       <div

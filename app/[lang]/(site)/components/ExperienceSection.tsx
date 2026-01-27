@@ -98,9 +98,9 @@ export default function ExperienceSection({ dict }: { dict: Dictionary }) {
                       {itemContent.title}
                     </h3>
 
-                    <div className="h-[1px] w-full bg-navy-600 mb-4 group-hover:bg-gold-500/50 transition-colors" />
-                    <p className="text-sm text-gray-300 leading-relaxed opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all">
-                      {itemContent.desc}
+                    <div className="h-[1px] w-full bg-navy-600 mb-4 bg-gold-500/50 transition-colors" />
+                    <p className="text-sm text-gray-300 leading-relaxed translate-y-4 opacity-100 group-hover:translate-y-0 transition-all">
+                      {/* {itemContent.desc} */}
                     </p>
                   </div>
                 </motion.div>

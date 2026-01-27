@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Montserrat, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Montserrat, Cairo } from "next/font/google";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -7,7 +7,7 @@ const montserrat = Montserrat({
   variable: "--font-en",
 });
 
-const arabicFont = IBM_Plex_Sans_Arabic({
+const arabicFont = Cairo({
   subsets: ["arabic"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-ar",

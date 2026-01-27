@@ -18,9 +18,7 @@ export const en = {
       branding: "Saudi Decision Intelligence",
 
       title: {
-        line1: "Unlock a",
-        highlight: "360° Intelligent View",
-        line2: "of Your Organization, Designed to support.",
+        line2: " Designed to support.",
       },
 
       description: {
@@ -295,7 +293,7 @@ export const en = {
         email: "info@nexgegl.com",
         website: "https://www.nexgegl.com",
         websiteLabel: "www.nexgegl.com",
-        phone: "+966 53 979 6996",
+        phone: "+9666537976996",
       },
 
       platform: {
