@@ -17,8 +17,8 @@ export default function DecisionContractSection({
 
   const imageSrc =
     lang === "ar"
-      ? "/images/decision-contract-example-ar.webp"
-      : "/images/decision-contract-example.webp";
+      ? "/images/إصلاح.png"
+      : "/images/Decision-Summary-1.png";
 
   return (
     <Section id="decision-contract" className="overflow-hidden">

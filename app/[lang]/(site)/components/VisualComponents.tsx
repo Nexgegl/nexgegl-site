@@ -1,16 +1,7 @@
 "use client";
 import React from "react";
 import {
-  Globe,
-  ArrowRight,
-  Server,
-  Smartphone,
-  Target,
-  Activity,
-  Zap,
-  Triangle,
-  Shield,
-  Cpu,
+  Globe, Zap
 } from "lucide-react";
 import { NexgeglLogo } from "./Logo";
 import { useState } from "react";
@@ -323,8 +314,8 @@ export const CommandCenterGraphic = () => {
           {/* Globe */}
           <div className="relative bg-navy-900/60 p-2 rounded border border-navy-700/50 h-24 flex items-center justify-center">
             <Globe className="absolute w-12 h-12 text-blue-500/20 animate-spin-slow" />
-            <span className="relative z-10 text-2xl font-bold text-white tracking-tighter">
-              360°
+            <span className="text-[12px] font-mono text-gold-400/80 tracking-widest">
+               NEXGEGL 
             </span>
           </div>
         </div>

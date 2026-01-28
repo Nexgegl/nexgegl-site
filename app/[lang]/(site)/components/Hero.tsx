@@ -38,8 +38,8 @@ export default function Hero({
   }, []);
 
   return (
-    <section
-      className="relative min-h-screen overflow-hidden"
+   <section className="relative h-screen pt-24 overflow-hidden"
+
       dir={lang === "ar" ? "rtl" : "ltr"}
       style={{
         backgroundImage: "url('/images/hero.webp')",
@@ -60,7 +60,7 @@ export default function Hero({
       {/* ================= Content ================= */}
       <div
         className={`
-          relative z-10 min-h-screen flex items-center
+          relative z-10 h-full flex items-center
           transition-all duration-700
           ${heroReady ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}
         `}

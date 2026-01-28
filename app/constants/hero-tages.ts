@@ -3,5 +3,5 @@ export const HERO_TAG_KEYS = [
   "dataIntegrity",
   "aiSignals",
   "commandCenter",
-  "view360",
+
 ] as const;
