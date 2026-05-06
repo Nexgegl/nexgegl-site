@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { getVerdictCounts } from "@/lib/scoring";
+import { getQualificationCounts } from "@/lib/scoring";
 
 export const runtime = "nodejs";
 
 type ExecCountsResponse = {
-  kill: number;
-  fix: number;
-  scale: number;
+  verified: number;
+  review_required: number;
+  blocked: number;
 };
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const client = await pool.connect();
   try {
-    const counts: ExecCountsResponse = await getVerdictCounts(client, tenantId);
+    const counts: ExecCountsResponse = await getQualificationCounts(client, tenantId);
     return NextResponse.json(counts);
   } catch (err) {
     const message = err instanceof Error ? err.message : "internal error";

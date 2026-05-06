@@ -52,7 +52,7 @@ export async function evaluateReadinessForRun(
 
     for (const score of scoresRes.rows) {
       // Skip non-actionable verdicts
-      if (score.verdict === "insufficient_data" || score.verdict === "none") continue;
+      if (score.verdict === "low_confidence") continue;
 
       // 3. Confidence check
       const confidenceOk = score.confidence >= CONFIDENCE_THRESHOLD;
@@ -151,8 +151,8 @@ export async function evaluateReadinessForRun(
           await auditTx(client, {
             tenant_id: tenantId,
             actor,
-            action: ACTIONS.DECISION_CREATED,
-            entity_type: "decision",
+            action: ACTIONS.QUALIFICATION_CREATED,
+            entity_type: "qualification",
             entity_id: decisionId,
             after_state: { verdict: score.verdict, requires_approval: requiresApproval },
           });
@@ -184,7 +184,7 @@ export async function evaluateReadinessForRun(
           tenant_id: tenantId,
           actor,
           action: ACTIONS.OUTBOUND_READY,
-          entity_type: "decision",
+          entity_type: "qualification",
           entity_id: decisionId,
           after_state: { verdict: score.verdict, confidence: score.confidence },
         });

@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS entity_scores (
   run_id      UUID        NOT NULL REFERENCES scoring_runs(id) ON DELETE RESTRICT,
   entity_id   UUID        NOT NULL REFERENCES canonical_entities(id) ON DELETE RESTRICT,
   verdict     TEXT        NOT NULL
-                          CHECK (verdict IN ('kill','fix','scale','none','insufficient_data')),
+                          CHECK (verdict IN ('verified','review_required','blocked','low_confidence')),
   confidence  NUMERIC     NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
   rule_trace  JSONB       NOT NULL DEFAULT '[]',
   scored_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS decisions (
   tenant_id        UUID        NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
   entity_id        UUID        NOT NULL REFERENCES canonical_entities(id) ON DELETE RESTRICT,
   score_id         UUID        NOT NULL REFERENCES entity_scores(id) ON DELETE RESTRICT,
-  verdict          TEXT        NOT NULL CHECK (verdict IN ('kill','fix','scale','none')),
+  verdict          TEXT        NOT NULL CHECK (verdict IN ('verified','review_required','blocked')),
   status           TEXT        NOT NULL DEFAULT 'pending'
                                CHECK (status IN ('pending','approved','rejected','executed','withdrawn')),
   requires_approval BOOLEAN    NOT NULL DEFAULT true,

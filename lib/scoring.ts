@@ -1,5 +1,5 @@
 // =============================================================================
-// NEXGEGL KFS Scoring Engine
+// NEXGEGL Account Qualification Engine
 //
 // Deterministic. Rule-based. No ML, no randomness.
 // Same inputs → same verdict, every time.
@@ -13,10 +13,10 @@
 //   6. signal_freshness   — staleness penalty if last signal > 30 days
 //
 // Verdict thresholds (on normalised confidence [0,1]):
-//   >= 0.68  →  SCALE
-//   <= 0.32  →  KILL
-//   else     →  FIX
-//   < 2 rules with data → INSUFFICIENT_DATA
+//   >= 0.68  →  VERIFIED
+//   <= 0.32  →  BLOCKED
+//   else     →  REVIEW_REQUIRED
+//   < 2 rules with data → LOW_CONFIDENCE
 // =============================================================================
 
 import { PoolClient } from "pg";
@@ -25,9 +25,9 @@ import { ACTIONS, auditTx } from "./audit";
 import {
   CanonicalEntity,
   EntityScore,
+  QualificationInput,
+  QualificationOutput,
   RuleResult,
-  ScoringInput,
-  ScoringOutput,
   ScoringRun,
   ScoringRunStatus,
   ScoringTrigger,
@@ -35,17 +35,17 @@ import {
 } from "./types";
 
 // ---------------------------------------------------------------------------
-// Weights (positive = towards SCALE, negative = towards KILL)
+// Weights (positive = towards VERIFIED, negative = towards BLOCKED)
 // These are invariants — changing them requires a documented ADR.
 // ---------------------------------------------------------------------------
 
 const WEIGHTS = {
-  revenue_trend:     { positive: 0.30, negative: -0.30 },
-  cost_efficiency:   { positive: 0.20, negative: -0.25 },
-  complaint_rate:    { positive: 0.10, negative: -0.20 },
-  fulfillment_rate:  { positive: 0.15, negative: -0.20 },
-  momentum:          { positive: 0.10, negative: -0.10 },
-  signal_freshness:  { positive: 0.00, negative: -0.10 },
+  revenue_trend:    { positive: 0.30, negative: -0.30 },
+  cost_efficiency:  { positive: 0.20, negative: -0.25 },
+  complaint_rate:   { positive: 0.10, negative: -0.20 },
+  fulfillment_rate: { positive: 0.15, negative: -0.20 },
+  momentum:         { positive: 0.10, negative: -0.10 },
+  signal_freshness: { positive: 0.00, negative: -0.10 },
 } as const;
 
 const MAX_RAW =
@@ -69,8 +69,8 @@ function normalise(raw: number): number {
   return Math.min(1, Math.max(0, (raw - MIN_RAW) / SCORE_RANGE));
 }
 
-const SCALE_THRESHOLD = 0.68;
-const KILL_THRESHOLD  = 0.32;
+const VERIFIED_THRESHOLD  = 0.68;
+const BLOCKED_THRESHOLD   = 0.32;
 const MIN_RULES_FOR_VERDICT = 2;
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ const MIN_RULES_FOR_VERDICT = 2;
 // Each returns a RuleResult. fired=false means no data → weight = 0.
 // ---------------------------------------------------------------------------
 
-function ruleRevenueTrend(events: ScoringInput["events"]): RuleResult {
+function ruleRevenueTrend(events: QualificationInput["events"]): RuleResult {
   const revenue = events
     .filter((e) => e.event_type === "revenue" && e.value != null && e.period_start)
     .sort((a, b) => (a.period_start! > b.period_start! ? 1 : -1));
@@ -108,7 +108,7 @@ function ruleRevenueTrend(events: ScoringInput["events"]): RuleResult {
   };
 }
 
-function ruleCostEfficiency(events: ScoringInput["events"]): RuleResult {
+function ruleCostEfficiency(events: QualificationInput["events"]): RuleResult {
   const revenue = events.filter((e) => e.event_type === "revenue").reduce((s, e) => s + (e.value ?? 0), 0);
   const cost    = events.filter((e) => e.event_type === "cost").reduce((s, e) => s + (e.value ?? 0), 0);
 
@@ -133,7 +133,7 @@ function ruleCostEfficiency(events: ScoringInput["events"]): RuleResult {
   };
 }
 
-function ruleComplaintRate(events: ScoringInput["events"]): RuleResult {
+function ruleComplaintRate(events: QualificationInput["events"]): RuleResult {
   const complaints = events.filter((e) => e.event_type === "complaint").length;
   const revenue = events.filter((e) => e.event_type === "revenue").reduce((s, e) => s + (e.value ?? 0), 0);
 
@@ -158,7 +158,7 @@ function ruleComplaintRate(events: ScoringInput["events"]): RuleResult {
   };
 }
 
-function ruleFulfillmentRate(events: ScoringInput["events"]): RuleResult {
+function ruleFulfillmentRate(events: QualificationInput["events"]): RuleResult {
   const deliveries = events.filter((e) => e.event_type === "delivery_success").length;
   const failures   = events.filter((e) => e.event_type === "delivery_failure").length;
   const total      = deliveries + failures;
@@ -184,7 +184,7 @@ function ruleFulfillmentRate(events: ScoringInput["events"]): RuleResult {
   };
 }
 
-function ruleMomentum(events: ScoringInput["events"]): RuleResult {
+function ruleMomentum(events: QualificationInput["events"]): RuleResult {
   const revenue = events
     .filter((e) => e.event_type === "revenue" && e.value != null && e.period_start)
     .sort((a, b) => (a.period_start! > b.period_start! ? 1 : -1));
@@ -210,7 +210,7 @@ function ruleMomentum(events: ScoringInput["events"]): RuleResult {
   };
 }
 
-function ruleSignalFreshness(events: ScoringInput["events"]): RuleResult {
+function ruleSignalFreshness(events: QualificationInput["events"]): RuleResult {
   if (events.length === 0) {
     return { rule: "signal_freshness", fired: true, direction: "negative", weight: WEIGHTS.signal_freshness.negative, evidence: { days_since_last: null } };
   }
@@ -233,10 +233,10 @@ function ruleSignalFreshness(events: ScoringInput["events"]): RuleResult {
 }
 
 // ---------------------------------------------------------------------------
-// Core scoring function — pure, side-effect-free
+// Core qualification function — pure, side-effect-free
 // ---------------------------------------------------------------------------
 
-export function scoreEntity(input: ScoringInput): ScoringOutput {
+export function qualifyAccount(input: QualificationInput): QualificationOutput {
   const rules: RuleResult[] = [
     ruleRevenueTrend(input.events),
     ruleCostEfficiency(input.events),
@@ -252,29 +252,28 @@ export function scoreEntity(input: ScoringInput): ScoringOutput {
 
   let verdict: Verdict;
   if (rulesWithData < MIN_RULES_FOR_VERDICT) {
-    verdict = "insufficient_data";
-  } else if (confidence >= SCALE_THRESHOLD) {
-    verdict = "scale";
-  } else if (confidence <= KILL_THRESHOLD) {
-    verdict = "kill";
+    verdict = "low_confidence";
+  } else if (confidence >= VERIFIED_THRESHOLD) {
+    verdict = "verified";
+  } else if (confidence <= BLOCKED_THRESHOLD) {
+    verdict = "blocked";
   } else {
-    verdict = "fix";
+    verdict = "review_required";
   }
 
   return { verdict, confidence: parseFloat(confidence.toFixed(6)), rule_trace: rules };
 }
 
 // ---------------------------------------------------------------------------
-// Run scoring for all active entities of a tenant
+// Run qualification for all active entities of a tenant
 // ---------------------------------------------------------------------------
 
-export async function runScoringForTenant(
+export async function runQualificationForTenant(
   tenantId: string,
   triggeredBy: ScoringTrigger = "manual",
   actor: string = "system"
 ): Promise<ScoringRun> {
   return withTransaction(async (client) => {
-    // 1. Create the scoring run record
     const runRes = await client.query<ScoringRun>(
       `INSERT INTO scoring_runs (tenant_id, triggered_by, actor, status)
        VALUES ($1, $2, $3, 'running') RETURNING *`,
@@ -285,23 +284,21 @@ export async function runScoringForTenant(
     await auditTx(client, {
       tenant_id: tenantId,
       actor,
-      action: ACTIONS.SCORING_RUN_STARTED,
+      action: ACTIONS.QUALIFICATION_RUN_STARTED,
       entity_id: run.id,
-      entity_type: "scoring_run",
+      entity_type: "qualification_run",
     });
 
     let entityCount = 0;
     let status: ScoringRunStatus = "completed";
 
     try {
-      // 2. Fetch all active entities for the tenant
       const entities = await client.query<CanonicalEntity>(
         `SELECT * FROM canonical_entities WHERE tenant_id = $1 AND is_active = true`,
         [tenantId]
       );
 
       for (const entity of entities.rows) {
-        // 3. Fetch signal events from the last 90 days
         const eventsRes = await client.query(
           `SELECT * FROM signal_events
            WHERE entity_id = $1 AND occurred_at >= now() - INTERVAL '90 days'
@@ -309,9 +306,8 @@ export async function runScoringForTenant(
           [entity.id]
         );
 
-        const output = scoreEntity({ entity, events: eventsRes.rows });
+        const output = qualifyAccount({ entity, events: eventsRes.rows });
 
-        // 4. Persist the score
         const scoreRes = await client.query<EntityScore>(
           `INSERT INTO entity_scores (tenant_id, run_id, entity_id, verdict, confidence, rule_trace)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
@@ -328,7 +324,7 @@ export async function runScoringForTenant(
         await auditTx(client, {
           tenant_id: tenantId,
           actor,
-          action: ACTIONS.ENTITY_SCORED,
+          action: ACTIONS.ACCOUNT_QUALIFIED,
           entity_type: entity.entity_type,
           entity_id: entity.id,
           after_state: {
@@ -345,14 +341,13 @@ export async function runScoringForTenant(
       await auditTx(client, {
         tenant_id: tenantId,
         actor,
-        action: ACTIONS.SCORING_RUN_FAILED,
+        action: ACTIONS.QUALIFICATION_RUN_FAILED,
         entity_id: run.id,
-        entity_type: "scoring_run",
+        entity_type: "qualification_run",
         reason: err instanceof Error ? err.message : "unknown",
       });
     }
 
-    // 5. Mark run complete
     const finalRes = await client.query<ScoringRun>(
       `UPDATE scoring_runs
        SET status = $1, completed_at = now(), entity_count = $2
@@ -364,9 +359,9 @@ export async function runScoringForTenant(
       await auditTx(client, {
         tenant_id: tenantId,
         actor,
-        action: ACTIONS.SCORING_RUN_COMPLETED,
+        action: ACTIONS.QUALIFICATION_RUN_COMPLETED,
         entity_id: run.id,
-        entity_type: "scoring_run",
+        entity_type: "qualification_run",
         after_state: { entity_count: entityCount },
       });
     }
@@ -376,13 +371,13 @@ export async function runScoringForTenant(
 }
 
 // ---------------------------------------------------------------------------
-// Aggregate verdict counts — used by the exec-counts API
+// Aggregate qualification counts — used by the exec-counts API
 // ---------------------------------------------------------------------------
 
-export async function getVerdictCounts(
+export async function getQualificationCounts(
   client: PoolClient,
   tenantId: string
-): Promise<{ kill: number; fix: number; scale: number }> {
+): Promise<{ verified: number; review_required: number; blocked: number }> {
   const result = await client.query<{ verdict: string; count: string }>(
     `
     SELECT es.verdict, COUNT(*) AS count
@@ -400,11 +395,11 @@ export async function getVerdictCounts(
     [tenantId]
   );
 
-  const counts = { kill: 0, fix: 0, scale: 0 };
+  const counts = { verified: 0, review_required: 0, blocked: 0 };
   for (const row of result.rows) {
-    if (row.verdict === "kill") counts.kill = parseInt(row.count, 10);
-    else if (row.verdict === "fix") counts.fix = parseInt(row.count, 10);
-    else if (row.verdict === "scale") counts.scale = parseInt(row.count, 10);
+    if (row.verdict === "verified")        counts.verified        = parseInt(row.count, 10);
+    else if (row.verdict === "review_required") counts.review_required = parseInt(row.count, 10);
+    else if (row.verdict === "blocked")    counts.blocked         = parseInt(row.count, 10);
   }
   return counts;
 }

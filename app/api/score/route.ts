@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runScoringForTenant } from "@/lib/scoring";
+import { runQualificationForTenant } from "@/lib/scoring";
 import { evaluateReadinessForRun } from "@/lib/readiness";
 import { ScoringTrigger } from "@/lib/types";
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       : "manual";
 
   try {
-    const run = await runScoringForTenant(tenant_id, trigger, actor ?? "api");
+    const run = await runQualificationForTenant(tenant_id, trigger, actor ?? "api");
 
     // Evaluate outbound readiness immediately after the run
     if (run.status === "completed") {

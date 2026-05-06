@@ -21,9 +21,13 @@ export type EntityType =
   | "initiative"
   | "sku";
 
-export type Verdict = "kill" | "fix" | "scale" | "none" | "insufficient_data";
+export type Verdict =
+  | "verified"
+  | "review_required"
+  | "blocked"
+  | "low_confidence";
 
-export type DecisionVerdict = Exclude<Verdict, "insufficient_data">;
+export type DecisionVerdict = Exclude<Verdict, "low_confidence">;
 
 export type DecisionStatus =
   | "pending"
@@ -176,12 +180,12 @@ export type RuleResult = {
   evidence: Record<string, unknown>;
 };
 
-export type ScoringInput = {
+export type QualificationInput = {
   entity: CanonicalEntity;
   events: SignalEvent[];
 };
 
-export type ScoringOutput = {
+export type QualificationOutput = {
   verdict: Verdict;
   confidence: number;
   rule_trace: RuleResult[];
