@@ -267,8 +267,10 @@ CREATE TRIGGER trg_outbound_ready_guard
   EXECUTE FUNCTION fn_outbound_ready_guard();
 
 -- ---------------------------------------------------------------------------
--- 10. AUDIT LOG — immutable, append-only governance record
--- GRANT INSERT only; no UPDATE or DELETE ever.
+-- 10. AUDIT LOG — immutable, append-only revenue intelligence record
+-- INSERT only. UPDATE and DELETE are blocked at two independent DB layers:
+--   • REVOKE UPDATE, DELETE ... FROM PUBLIC  (privilege removal)
+--   • trg_audit_log_immutable BEFORE trigger (unconditional exception)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit_log (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -289,3 +291,29 @@ CREATE INDEX IF NOT EXISTS audit_log_occurred_at_idx
   ON audit_log(occurred_at DESC);
 CREATE INDEX IF NOT EXISTS audit_log_action_idx
   ON audit_log(tenant_id, action);
+
+-- Layer 1: Remove UPDATE and DELETE from PUBLIC.
+-- Operators must additionally run:
+--   REVOKE UPDATE, DELETE ON audit_log FROM <app_role>;
+REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC;
+
+-- Layer 2: Unconditional immutability trigger.
+-- Fires for every UPDATE or DELETE regardless of the caller's role,
+-- providing defence-in-depth beyond privilege management alone.
+CREATE OR REPLACE FUNCTION fn_audit_log_immutable()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION
+    'audit_log is append-only: % is not permitted (row id=%)',
+    TG_OP, OLD.id
+    USING ERRCODE = 'insufficient_privilege';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_audit_log_immutable ON audit_log;
+CREATE TRIGGER trg_audit_log_immutable
+  BEFORE UPDATE OR DELETE ON audit_log
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_audit_log_immutable();
