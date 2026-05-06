@@ -1,4 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { pool } from "@/lib/db";
+import { getVerdictCounts } from "@/lib/scoring";
+
+export const runtime = "nodejs";
 
 type ExecCountsResponse = {
   kill: number;
@@ -6,26 +10,20 @@ type ExecCountsResponse = {
   scale: number;
 };
 
-// MOCK DATA — will be replaced later
-const mockDecisions = [
-  { id: "1", verdict: "kill" },
-  { id: "2", verdict: "fix" },
-  { id: "3", verdict: "scale" },
-  { id: "4", verdict: "none" },
-];
-
-export async function GET() {
-  const counts: ExecCountsResponse = {
-    kill: 0,
-    fix: 0,
-    scale: 0,
-  };
-
-  for (const decision of mockDecisions) {
-    if (decision.verdict === "kill") counts.kill++;
-    else if (decision.verdict === "fix") counts.fix++;
-    else if (decision.verdict === "scale") counts.scale++;
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const tenantId = req.nextUrl.searchParams.get("tenant_id");
+  if (!tenantId) {
+    return NextResponse.json({ error: "tenant_id query param required" }, { status: 400 });
   }
 
-  return NextResponse.json(counts);
+  const client = await pool.connect();
+  try {
+    const counts: ExecCountsResponse = await getVerdictCounts(client, tenantId);
+    return NextResponse.json(counts);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "internal error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    client.release();
+  }
 }
