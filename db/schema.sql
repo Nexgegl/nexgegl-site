@@ -169,18 +169,102 @@ CREATE INDEX IF NOT EXISTS decisions_entity_idx ON decisions(entity_id);
 -- readiness_checks documents each check that was evaluated.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS outbound_queue (
-  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
-  decision_id     UUID        NOT NULL REFERENCES decisions(id) ON DELETE RESTRICT,
-  readiness_checks JSONB      NOT NULL DEFAULT '{}',
-  is_ready        BOOLEAN     NOT NULL DEFAULT false,
-  ready_at        TIMESTAMPTZ,
-  dispatched_at   TIMESTAMPTZ,
-  dispatch_status TEXT        CHECK (dispatch_status IN ('queued','dispatched','failed')),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (decision_id)
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        UUID        NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  decision_id      UUID        NOT NULL REFERENCES decisions(id) ON DELETE RESTRICT,
+  readiness_checks JSONB       NOT NULL DEFAULT '{}',
+  is_ready         BOOLEAN     NOT NULL DEFAULT false,
+  ready_at         TIMESTAMPTZ,
+  dispatched_at    TIMESTAMPTZ,
+  dispatch_status  TEXT        CHECK (dispatch_status IN ('queued','dispatched','failed')),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (decision_id),
+  -- Layer 1: declarative guard — any writer (ORM, psql, migration) is blocked.
+  -- (expr)::boolean IS TRUE is false when expr is NULL, so a missing JSONB key
+  -- also triggers a violation. The trigger (Layer 2) adds cross-table checks.
+  CONSTRAINT chk_outbound_ready_integrity CHECK (
+    NOT is_ready
+    OR (
+      ready_at IS NOT NULL
+      AND (readiness_checks -> 'confidence_threshold' ->> 'passed')::boolean IS TRUE
+      AND (readiness_checks -> 'verdict_consistency'  ->> 'passed')::boolean IS TRUE
+      AND (readiness_checks -> 'pdpl_consent'         ->> 'passed')::boolean IS TRUE
+      AND (readiness_checks -> 'approval_gate'        ->> 'passed')::boolean IS TRUE
+    )
+  )
 );
 CREATE INDEX IF NOT EXISTS outbound_queue_ready_idx ON outbound_queue(is_ready, ready_at);
+
+-- ---------------------------------------------------------------------------
+-- Layer 2: BEFORE trigger — cross-table validation of is_ready=true writes.
+-- Rejects writes when the linked decision has a non-actionable verdict or a
+-- terminal status, which the CHECK constraint cannot see.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_outbound_ready_guard()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_verdict TEXT;
+  v_status  TEXT;
+BEGIN
+  IF NEW.is_ready IS NOT TRUE THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.ready_at IS NULL THEN
+    RAISE EXCEPTION
+      'outbound_queue: is_ready=true requires ready_at (decision_id=%)',
+      NEW.decision_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NOT (
+    (NEW.readiness_checks -> 'confidence_threshold' ->> 'passed')::boolean IS TRUE
+    AND (NEW.readiness_checks -> 'verdict_consistency'  ->> 'passed')::boolean IS TRUE
+    AND (NEW.readiness_checks -> 'pdpl_consent'         ->> 'passed')::boolean IS TRUE
+    AND (NEW.readiness_checks -> 'approval_gate'        ->> 'passed')::boolean IS TRUE
+  ) THEN
+    RAISE EXCEPTION
+      'outbound_queue: is_ready=true requires all readiness_checks gates passed=true (decision_id=%)',
+      NEW.decision_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT verdict, status INTO v_verdict, v_status
+  FROM   decisions
+  WHERE  id = NEW.decision_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'outbound_queue: decision % not found',
+      NEW.decision_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  IF v_verdict = 'low_confidence' THEN
+    RAISE EXCEPTION
+      'outbound_queue: is_ready=true not permitted for low_confidence verdict (decision_id=%)',
+      NEW.decision_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_status IN ('rejected', 'withdrawn') THEN
+    RAISE EXCEPTION
+      'outbound_queue: is_ready=true not permitted when decision status=% (decision_id=%)',
+      v_status, NEW.decision_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_outbound_ready_guard ON outbound_queue;
+CREATE TRIGGER trg_outbound_ready_guard
+  BEFORE INSERT OR UPDATE ON outbound_queue
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_outbound_ready_guard();
 
 -- ---------------------------------------------------------------------------
 -- 10. AUDIT LOG — immutable, append-only governance record
